@@ -93,7 +93,7 @@ int rgb2hsl(const rgb_data *rgb, hsl_data *hsl) {
 	
 	double r,g,b;
 	double min, max, delta;
-	double h,s,l;
+	double h,l;
 	
 	r = rgb->r / 255.0;
 	g = rgb->g / 255.0;
@@ -271,14 +271,14 @@ int rgb2hsv (const rgb_data *rgb, hsv_data *hsv) {
 		// black
 		hsv->h = 0.0;
 		hsv->s = 0.0;
-		return;
+		return 1;
 	}
 
 	if (max == min) {
 		// gray
 		hsv->h = 0.0;
 		hsv->s = 0.0;
-		return;
+		return 1;
 	}
 
 	// Hue
@@ -298,4 +298,6 @@ int rgb2hsv (const rgb_data *rgb, hsv_data *hsv) {
 		h += 6.0;
 
 	hsv->h = h * 60.0;
+	
+	return 1;
 }
