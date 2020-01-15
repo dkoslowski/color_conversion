@@ -11,6 +11,12 @@
 #define COLOR_CONVERSION_H
 
 /*
+ * RETURN VALUE (all functions):
+ * 0 - invalid input data
+ * 1 - success
+ */
+
+/*
  * HSL data
  */
 typedef struct {
