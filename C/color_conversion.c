@@ -1,161 +1,301 @@
 /*
- * Simple functions for RGB<->HSV colors converting
+ * Simple functions for RGB<->HSV or RGB<->HSL color conversion
  * 
  * Author: Dennis Koslowski <dennis.koslowski@gmx.de>
- * Date:   2020-01-13
  *
  */
 
+#include <math.h>
+
 #include "color_conversion.h"
 
+#define FULL_CIRCLE 360.0
+
 /*
- * RGB(0..1) -> HSV
+ * A helper for transformation in hsl2rgb()
  */
-hsv rgb2hsv(rgb in) {
-
-    hsv out;
-    double min, max, delta;
-
-    min = in.r < in.g ? in.r : in.g;
-    min = min < in.b ? min : in.b;
-
-    max = in.r > in.g ? in.r : in.g;
-    max = max > in.b ? max : in.b;
-
-    out.v = max; // v
-    delta = max - min;
-
-    if (delta < 0.00001) {
-        out.s = 0;
-        out.h = 0; // undefined, maybe nan?
-        return out;
-    }
-
-    if (max > 0.0) { // NOTE: if Max is == 0, this divide would cause a crash
-        out.s = (delta / max); // s
-
-    } else {
-        // if max is 0, then r = g = b = 0
-        // s = 0, h is undefined
-        out.s = 0.0;
-        out.h = NAN; // its now undefined
-        return out;
-    }
-
-    if (in.r >= max)                   // > is bogus, just keeps compilor happy
-        out.h = (in.g - in.b) / delta; // between yellow & magenta
-
-    else if (in.g >= max)
-        out.h = 2.0 + (in.b - in.r) / delta; // between cyan & yellow
-
-    else
-        out.h = 4.0 + (in.r - in.g) / delta; // between magenta & cyan
-
-    out.h *= 60.0; // degrees
-
-    if (out.h < 0.0)
-        out.h += 360.0;
-
-    return out;
+static double rgb_comp(double tX, double t1, double t2) {
+	
+	double comp;
+	
+	if (tX * 6 < 1.0) {
+		comp = t2 + (t1 - t2) * tX * 6;
+	} else if (tX * 2 < 1.0) {
+		comp = t1;
+	} else if (tX * 3 < 2.0) {
+		comp = t2 + (t1 - t2) * (0.666 - tX) * 6;
+	} else {
+		comp = t2;
+	}
+	
+	return comp * 255.0;
 }
 
 /*
- * RGB(0..255) -> HSV
+ * HSL->RGB
  */
-hsv rgbint2hsv(rgbint in) {
+int hsl2rgb(const hsl_data *hsl, rgb_data *rgb) {
 
-	rgb buf;
+	double h, s, l;
+	double p, q;
+	double r, g, b;
 	
-	buf.r = (float)in.r/255.0;
-	buf.g = (float)in.g/255.0;
-	buf.b = (float)in.b/255.0;
+	h = hsl->h / 360.0;
+	s = hsl->s / 100.0;
+	l = hsl->l / 100.0;
+
+	// data consistency check
+	if (h < 0.0 || h > 1.0 ||
+		s < 0.0 || s > 1.0 ||
+		l < 0.0 || l > 1.0)
+	{
+		return 0;
+	}
 	
-	return rgb2hsv(buf);
+	if (0 == s) {
+
+		// no saturation, just convert the luminance to RGB
+		double tmp = l * 255.0;
+		rgb->r = tmp;
+		rgb->g = tmp;
+		rgb->b = tmp;
+		
+		return 1;	
+	}
+
+	if (l < 0.5) {
+		p = l * (1.0 + s);
+	} else {
+		p = l + s - l * s;
+	}
+	
+	q = 2 * l - p;
+	
+	r = h + 0.333;
+	if (r > 1)
+		r -= 1.0;
+	g = h;
+	b = h - 0.333;
+	if (b < 0)
+		b += 1;
+
+	rgb->r = rgb_comp(r, p, q);
+	rgb->g = rgb_comp(g, p, q);
+	rgb->b = rgb_comp(b, p, q);
+	
+	return 1;
 }
 
 /*
- * HSV -> RGB(0..1)
+ * RGB->HSL
  */
-rgb hsv2rgb(hsv in) {
+int rgb2hsl(const rgb_data *rgb, hsl_data *hsl) {
+	
+	double r,g,b;
+	double min, max, delta;
+	double h,s,l;
+	
+	r = rgb->r / 255.0;
+	g = rgb->g / 255.0;
+	b = rgb->b / 255.0;
 
-    double hh, p, q, t, ff;
-    long i;
-    rgb out;
+	// data consistency check
+	if (r < 0.0 || r > 1.0 ||
+		g < 0.0 || g > 1.0 ||
+		b < 0.0 || b > 1.0)
+	{
+		return 0;
+	}
 
-    if (in.s <= 0.0) { // < is bogus, just shuts up warnings
-        out.r = in.v;
-        out.g = in.v;
-        out.b = in.v;
-        return out;
-    }
+	min   = fmin(r, fmin(g, b));
+	max   = fmax(r, fmax(g, b));
+	delta = max - min;
+	
+	// Luminance
+	l = (min + max) / 2;
+	hsl->l = l * 100.0; 
 
-    hh = in.h;
+	if (min == max) {
 
-    if (hh >= 360.0)
-        hh = 0.0;
+		// Gray, no saturation, hue irrelevant
+		hsl->h = 0.0;
+		hsl->s = 0.0;
+		return 1;
+	}
+	
+	// Saturation
+	if (l < 0.5) {
+		hsl->s = delta / (max + min) * 100.0;
+	} else {
+		hsl->s = delta / (2.0 - max - min) * 100.0;
+	}
 
-    hh /= 60.0;
-    i = (long)hh;
-    ff = hh - i;
-    p = in.v * (1.0 - in.s);
-    q = in.v * (1.0 - (in.s * ff));
-    t = in.v * (1.0 - (in.s * (1.0 - ff)));
+	// Hue
+	if (r == max)
+		// Yellow -- Magenta
+		h = (g - b) / delta;
 
-    switch (i) {
+	else if (g == max)
+		// Cyan -- Yellow
+		h = 2.0 + (b - r) / delta;
 
-    case 0:
-        out.r = in.v;
-        out.g = t;
-        out.b = p;
-        break;
+	else
+		// Magenta -- Cyan
+		h = 4.0 + (r - g) / delta;
 
-    case 1:
-        out.r = q;
-        out.g = in.v;
-        out.b = p;
-        break;
+	if (h > 6.0)
+		h -= 6.0;
+	else if (h < 0.0)
+		h += 6.0;
 
-    case 2:
-        out.r = p;
-        out.g = in.v;
-        out.b = t;
-        break;
-
-    case 3:
-        out.r = p;
-        out.g = q;
-        out.b = in.v;
-        break;
-
-    case 4:
-        out.r = t;
-        out.g = p;
-        out.b = in.v;
-        break;
-
-    case 5:
-
-    default:
-        out.r = in.v;
-        out.g = p;
-        out.b = q;
-        break;
-    }
-
-    return out;
+	hsl->h = h * 60;
+	
+	return 1;
 }
 
 /*
- * HSV -> RGB(0..255)
+ * HSV->RGB
  */
-rgbint hsv2rgbint(hsv in) {
+int hsv2rgb (const hsv_data *hsv, rgb_data *rgb) {
+
+	int i;
+	double h, s, v;
+	double f, p, q, t;
+	double r, g, b;
+
+	h = hsv->h / 60.0; // sector 0 to 5
+	s = hsv->s / 100.0;
+	v = hsv->v / 100.0;
 	
-	rgbint out;
-	rgb buf = hsv2rgb(in);
+	// data consistency check
+	if (h < 0.0 || h > 6.0 ||
+		s < 0.0 || s > 1.0  ||
+		v < 0.0 || v > 1.0)
+	{
+		return 0;
+	}
+
+	if( s == 0 ) {
+		// shades of gray
+		rgb->r = rgb->g = rgb->b = v * 255.0;
+		return 1;
+	}
+
+	i = floor(h);  // integral part of h
+	f = h - i;     // factorial part of h
+	p = v * (1 - s);
+	q = v * (1 - s * f);
+	t = v * (1 - s * (1 - f));
+
+	switch (i) {
+
+	case 0:
+		r = v;
+		g = t;
+		b = p;
+		break;
+
+	case 1:
+		r = q;
+		g = v;
+		b = p;
+		break;
+
+	case 2:
+		r = p;
+		g = v;
+		b = t;
+		break;
+
+	case 3:
+		r = p;
+		g = q;
+		b = v;
+		break;
 	
-	out.r = (uint8_t)(buf.r * 255);
-	out.g = (uint8_t)(buf.g * 255);
-	out.b = (uint8_t)(buf.b * 255);
+	case 4:
+		r = t;
+		g = p;
+		b = v;
+		break;
 	
-	return out;
+	case 5:
+		r = v;
+		g = p;
+		b = q;
+		break;
+
+	default:
+		break;
+	}
+	
+	rgb->r = r * 255.0;
+	rgb->g = g * 255.0;
+	rgb->b = b * 255.0;
+	
+	return 1;
+}
+
+/*
+ * RGB->HSV
+ */
+int rgb2hsv (const rgb_data *rgb, hsv_data *hsv) { 
+
+	double r, g, b;
+	double min, max, delta;
+	double h;
+
+	r = rgb->r / 255.0;
+	g = rgb->g / 255.0;
+	b = rgb->b / 255.0;
+
+	// data consistency check
+	if (r < 0.0 || r > 1.0 ||
+		g < 0.0 || g > 1.0 ||
+		b < 0.0 || b > 1.0)
+	{
+		return 0;
+	}
+
+	max = fmax(r, fmax(g, b));
+	min = fmin(r, fmin(g, b));
+	delta = max - min;
+
+	// Value
+	hsv->v = max * 100.0;
+
+	if( max != 0 ) {
+		hsv->s = (delta / max) * 100.0;
+	
+	} else {
+		// black
+		hsv->h = 0.0;
+		hsv->s = 0.0;
+		return;
+	}
+
+	if (max == min) {
+		// gray
+		hsv->h = 0.0;
+		hsv->s = 0.0;
+		return;
+	}
+
+	// Hue
+	if (r == max)
+		// Yellow -- Magenta
+		h = (g - b) / delta;
+
+	else if (g == max)
+		// Cyan -- Yellow
+		h = 2.0 + (b - r) / delta;
+
+	else
+		// Magenta -- Cyan
+		h = 4.0 + (r - g) / delta;
+
+	if (h < 0.0)
+		h += 6.0;
+
+	hsv->h = h * 60.0;
 }

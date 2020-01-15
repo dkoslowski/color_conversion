@@ -1,54 +1,60 @@
 /*
- * Simple functions for RGB<->HSV colors converting
+ * Simple functions for RGB<->HSV or RGB<->HSL color conversion
  * 
  * Author: Dennis Koslowski <dennis.koslowski@gmx.de>
- * Date:   2020-01-13
- * 
+ *
  */
 
-
 #include <stdint.h>
-#include <math.h>
 
 #ifndef COLOR_CONVERSION_H
 #define COLOR_CONVERSION_H
 
+/*
+ * HSL data
+ */
 typedef struct {
-    double r; // a fraction between 0 and 1
-    double g; // a fraction between 0 and 1
-    double b; // a fraction between 0 and 1
-} rgb;
+	double h; // hue (° of angle) 0.0 - 360.0
+	double s; // saturation       0.0 - 100.0
+	double l; // luminance        0.0 - 100.0
+} hsl_data;
 
+/*
+ * HSV data
+ */
 typedef struct {
-    uint8_t r; // 0..255
-    uint8_t g; // 0..255
-    uint8_t b; // 0..255
-} rgbint;
+	double h; // hue (° of angle) 0.0 - 360.0
+	double s; // saturation       0.0 - 100.0
+	double v; // value            0.0 - 100.0
+} hsv_data;
 
+/*
+ * RGB data
+ */
 typedef struct {
-    double h; // angle in degrees
-    double s; // a fraction between 0 and 1
-    double v; // a fraction between 0 and 1
-} hsv;
+	double r; // red   0.0 - 255.0
+	double g; // green 0.0 - 255.0
+	double b; // blue  0.0 - 255.0
+} rgb_data;
 
 /*
- * RGB(0..1) -> HSV
+ * HSL->RGB
  */
-hsv rgb2hsv(rgb in);
+int hsl2rgb(const hsl_data *hsl, rgb_data *rgb);
 
 /*
- * RGB(0..255) -> HSV
+ * RGB->HSL
  */
-hsv rgbint2hsv(rgbint in);
+int rgb2hsl(const rgb_data *rgb, hsl_data *hsl);
 
 /*
- * HSV -> RGB(0..1)
+ * HSV->RGB
  */
-rgb hsv2rgb(hsv in);
+int hsv2rgb (const hsv_data *hsv, rgb_data *rgb);
 
 /*
- * HSV -> RGB(0..255)
+ * RGB->HSV
  */
-rgbint hsv2rgbint(hsv in);
+int rgb2hsv (const rgb_data *rgb, hsv_data *hsv);
 
-#endif // #ifndef COLOR_CONVERSION_H
+#endif // COLOR_CONVERSION_H
